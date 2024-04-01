@@ -2,6 +2,7 @@
 pragma solidity ^0.8.21;
 
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 error NFTSwap__SwapNotExists(string message);
 error NFTSwap__SwapAlreadyExists(string message);
@@ -9,7 +10,7 @@ error NFTSwap__NotAuthorized(string message);
 error NFTSwap__InvalidNFT(string message);
 error NFTSwap__BothNFTNotDeposited(string message);
 
-contract NFTSwap {
+contract NFTSwap is IERC721Receiver {
     struct Swap {
         address initiator;
         address counterparty;
@@ -108,8 +109,8 @@ contract NFTSwap {
         bytes32 _swapId,
         uint256 _tokenId
     ) external onlyValidSwap(_swapId) {
-        Swap storage swap = s_swaps[_swapId];
-        if (msg.sender != swap.initiator || msg.sender != swap.counterparty) {
+        Swap memory swap = s_swaps[_swapId];
+        if (msg.sender != swap.initiator && msg.sender != swap.counterparty) {
             revert NFTSwap__NotAuthorized("Not authorized to deposit");
         }
 
@@ -140,6 +141,7 @@ contract NFTSwap {
             token = swap.tokenB;
             swap.tokenBDeposited = true;
         }
+        s_swaps[_swapId] = swap;
 
         emit NFTDeposited(_swapId, msg.sender, token, _tokenId);
     }
@@ -152,27 +154,30 @@ contract NFTSwap {
             revert NFTSwap__BothNFTNotDeposited("Both NFTs not deposited");
         }
         if (
-            msg.sender != s_swaps[_swapId].initiator ||
+            msg.sender != s_swaps[_swapId].initiator &&
             msg.sender != s_swaps[_swapId].counterparty
         ) {
             revert NFTSwap__NotAuthorized("Not authorized");
         }
 
         address initiatorToken = s_swaps[_swapId].tokenA;
-        uint256 initiatorTokenId = s_swaps[_swapId].idA;
-        address counterpartyToken = IERC721(s_swaps[_swapId].tokenB).ownerOf(
-            s_swaps[_swapId].idB
-        );
+        uint256 tokenIdA = s_swaps[_swapId].idA;
+        uint256 tokenIdB = s_swaps[_swapId].idB;
+        //TODO: Check if the initiator is the owner of the token A
+        address counterpartyToken = s_swaps[_swapId].tokenB;
+
+        IERC721(initiatorToken).approve(address(this), tokenIdA);
+        IERC721(s_swaps[_swapId].tokenB).approve(address(this), tokenIdB);
 
         IERC721(initiatorToken).safeTransferFrom(
             address(this),
             s_swaps[_swapId].counterparty,
-            initiatorTokenId
+            tokenIdA
         );
         IERC721(counterpartyToken).safeTransferFrom(
             address(this),
             s_swaps[_swapId].initiator,
-            initiatorTokenId
+            tokenIdB
         );
 
         delete s_swaps[_swapId];
@@ -186,5 +191,18 @@ contract NFTSwap {
             s_swaps[_swapId].tokenB,
             s_swaps[_swapId].idB
         );
+    }
+
+    function getSwap(bytes32 swapId) public view returns (Swap memory) {
+        return s_swaps[swapId];
+    }
+
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external pure override returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 }

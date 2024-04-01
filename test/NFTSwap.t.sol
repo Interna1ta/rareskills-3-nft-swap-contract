@@ -14,6 +14,31 @@ contract NFTSwapTest is Test {
     uint256 public idA = 1;
     uint256 public idB = 2;
 
+    event SwapCreated(
+        bytes32 swapId,
+        address indexed initiator,
+        address indexed counterparty,
+        address tokenA,
+        uint256 idA,
+        address tokenB,
+        uint256 idB
+    );
+    event NFTDeposited(
+        bytes32 swapId,
+        address depositor,
+        address token,
+        uint256 tokenId
+    );
+    event SwapCompleted(
+        bytes32 swapId,
+        address initiator,
+        address counterparty,
+        address tokenA,
+        uint256 idA,
+        address tokenB,
+        uint256 idB
+    );
+
     function setUp() public {
         vm.startPrank(INITIATOR);
         nftSwap = new NFTSwap();
@@ -59,6 +84,38 @@ contract NFTSwapTest is Test {
             address(mockNFTB),
             idB
         );
+    }
+
+    function testSwapCreatedEvent() public {
+        vm.startPrank(INITIATOR);
+        bytes32 swapId = keccak256(
+            abi.encodePacked(
+                INITIATOR,
+                COUNTERPARTY,
+                mockNFTA,
+                idA,
+                mockNFTB,
+                idB
+            )
+        );
+        vm.expectEmit();
+        emit SwapCreated(
+            swapId,
+            INITIATOR,
+            COUNTERPARTY,
+            address(mockNFTA),
+            idA,
+            address(mockNFTB),
+            idB
+        );
+        nftSwap.createSwap(
+            COUNTERPARTY,
+            address(mockNFTA),
+            idA,
+            address(mockNFTB),
+            idB
+        );
+        vm.stopPrank();
     }
 
     function testDepositNFT() public {
